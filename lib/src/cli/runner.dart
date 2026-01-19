@@ -161,6 +161,21 @@ abstract class DepGuardCommand extends Command<int> {
       logger: logger.info,
     );
   }
+
+  ReportMetadata buildMetadata(
+    CommonOptions options, {
+    required bool allowNetworkFail,
+  }) {
+    return ReportMetadata(
+      toolVersion: depGuardVersion,
+      generatedAt: DateTime.now().toUtc(),
+      allowNetworkFail: allowNetworkFail,
+      cacheEnabled: !options.noCache,
+      cacheTtlHours: options.cacheTtlHours,
+      timeoutSeconds: options.timeout,
+      retries: options.retries,
+    );
+  }
 }
 
 class AnalyzeCommand extends DepGuardCommand {
@@ -194,16 +209,22 @@ class AnalyzeCommand extends DepGuardCommand {
       project,
       explainScore: argResults?['explain-score'] == true,
     );
+    final meta = buildMetadata(
+      options,
+      allowNetworkFail: options.allowNetworkFail,
+    );
 
     final output = options.format == 'json'
         ? renderHealthJson(
             report,
             explainScore: argResults?['explain-score'] == true,
+            meta: meta,
           )
         : renderHealthHuman(
             report,
             quiet: options.quiet,
             explainScore: argResults?['explain-score'] == true,
+            meta: meta,
           );
 
     await writeOutput(output, stdout: stdout, outPath: options.out);
@@ -245,9 +266,10 @@ class PlanCommand extends DepGuardCommand {
 
     final project = loadProjectContext(options);
     final pubClient = createPubClient(options, project.projectDir);
+    final allowNetworkFail = options.allowNetworkFail || options.format == 'human';
     final planner = Planner(
       pubClient: pubClient,
-      allowNetworkFail: options.allowNetworkFail || options.format == 'human',
+      allowNetworkFail: allowNetworkFail,
     );
 
     final plan = await planner.plan(
@@ -266,11 +288,12 @@ class PlanCommand extends DepGuardCommand {
       summary: plan.summary,
       networkFailures: plan.networkFailures,
     );
+    final meta = buildMetadata(options, allowNetworkFail: allowNetworkFail);
 
     final output = switch (options.format) {
-      'json' => renderPlanJson(limitedPlan),
-      'markdown' => renderPlanMarkdown(limitedPlan),
-      _ => renderPlanHuman(limitedPlan),
+      'json' => renderPlanJson(limitedPlan, meta: meta),
+      'markdown' => renderPlanMarkdown(limitedPlan, meta: meta),
+      _ => renderPlanHuman(limitedPlan, meta: meta),
     };
 
     await writeOutput(output, stdout: stdout, outPath: options.out);
@@ -314,10 +337,30 @@ class CiCommand extends DepGuardCommand {
         .where((finding) => finding.severity.index <= threshold.index)
         .toList();
     final exceeded = exceedsThreshold(report.findings, threshold);
+    final meta = buildMetadata(
+      options,
+      allowNetworkFail: options.allowNetworkFail,
+    );
+    final ciSummary = CiSummary(
+      threshold: failOn,
+      exceeded: exceeded,
+      failingCount: failingFindings.length,
+    );
 
     final output = options.format == 'json'
-        ? renderHealthJson(report, explainScore: false)
-        : _renderCiHuman(report, failingFindings);
+        ? renderHealthJson(
+            report,
+            explainScore: false,
+            meta: meta,
+            ci: ciSummary,
+          )
+        : _renderCiHuman(
+            report,
+            failingFindings,
+            threshold: failOn,
+            exceeded: exceeded,
+            meta: meta,
+          );
 
     await writeOutput(output, stdout: stdout, outPath: options.out);
     return exceeded ? 2 : 0;
@@ -333,10 +376,29 @@ Severity _severityFromString(String value) {
   };
 }
 
-String _renderCiHuman(HealthReport report, List<Finding> failing) {
+String _renderCiHuman(
+  HealthReport report,
+  List<Finding> failing, {
+  required String threshold,
+  required bool exceeded,
+  ReportMetadata? meta,
+}) {
   final buffer = StringBuffer();
   buffer.writeln(
     'Dependency Health - ${report.projectName} (${report.projectPath})',
+  );
+  if (meta != null) {
+    buffer.writeln(formatReportMetadata(meta));
+  }
+  buffer.writeln(
+    'Type: ${report.summary.projectType} | SDK constraints: ${report.summary.sdkConstraint} '
+    '| Direct deps: ${report.summary.directCount} | Transitive: ${report.summary.transitiveCount}',
+  );
+  if (report.networkFailures) {
+    buffer.writeln('Warning: pub.dev unavailable for some packages.');
+  }
+  buffer.writeln(
+    'Threshold: $threshold | Status: ${exceeded ? 'FAIL' : 'PASS'}',
   );
   if (failing.isNotEmpty) {
     buffer.writeln('Findings:');

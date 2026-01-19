@@ -6,6 +6,7 @@ void main() {
   test('ci threshold exit logic', () {
     final findings = [
       Finding(
+        rule: FindingRule.majorBehind,
         severity: Severity.warn,
         package: 'http',
         message: 'Warn',

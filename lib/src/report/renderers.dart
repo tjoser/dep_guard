@@ -6,14 +6,23 @@ String renderHealthHuman(
   HealthReport report, {
   required bool quiet,
   required bool explainScore,
+  ReportMetadata? meta,
 }) {
   final buffer = StringBuffer();
   buffer.writeln(
     'Dependency Health - ${report.projectName} (${report.projectPath})',
   );
+  if (meta != null) {
+    buffer.writeln(formatReportMetadata(meta));
+  }
+  buffer.writeln(
+    'Type: ${report.summary.projectType} | SDK constraints: ${report.summary.sdkConstraint} '
+    '| Direct deps: ${report.summary.directCount} | Transitive: ${report.summary.transitiveCount}',
+  );
   if (report.networkFailures) {
     buffer.writeln('Warning: pub.dev unavailable for some packages.');
   }
+  buffer.writeln();
 
   final grouped = <Severity, List<Finding>>{
     Severity.critical: [],
@@ -66,9 +75,15 @@ String renderHealthHuman(
   return buffer.toString();
 }
 
-String renderHealthJson(HealthReport report, {required bool explainScore}) {
+String renderHealthJson(
+  HealthReport report, {
+  required bool explainScore,
+  ReportMetadata? meta,
+  CiSummary? ci,
+}) {
   final findings = report.findings
       .map((finding) => {
+            'rule': finding.rule,
             'severity': finding.severity.name,
             'package': finding.package,
             'locked': finding.locked?.toString(),
@@ -84,6 +99,7 @@ String renderHealthJson(HealthReport report, {required bool explainScore}) {
     'project': {
       'name': report.projectName,
       'path': report.projectPath,
+      'type': report.summary.projectType,
       'sdkConstraint': report.summary.sdkConstraint,
     },
     'summary': {
@@ -99,6 +115,12 @@ String renderHealthJson(HealthReport report, {required bool explainScore}) {
     'findings': findings,
   };
 
+  if (meta != null) {
+    jsonMap['meta'] = meta.toJson();
+  }
+  if (ci != null) {
+    jsonMap['ci'] = ci.toJson();
+  }
   if (explainScore) {
     jsonMap['scoreBreakdown'] = report.explainScore;
   }
@@ -106,9 +128,12 @@ String renderHealthJson(HealthReport report, {required bool explainScore}) {
   return const JsonEncoder.withIndent('  ').convert(jsonMap);
 }
 
-String renderPlanHuman(UpgradePlan plan) {
+String renderPlanHuman(UpgradePlan plan, {ReportMetadata? meta}) {
   final buffer = StringBuffer();
   buffer.writeln('Safe Upgrade Plan - ${plan.projectName} (${plan.projectPath})');
+  if (meta != null) {
+    buffer.writeln(formatReportMetadata(meta));
+  }
   if (plan.networkFailures) {
     buffer.writeln('Warning: pub.dev unavailable for some packages.');
   }
@@ -124,16 +149,19 @@ String renderPlanHuman(UpgradePlan plan) {
     }
     for (final step in items) {
       final locked = step.locked?.toString() ?? 'UNKNOWN';
-      final latest = step.latestTarget?.toString() ?? 'UNKNOWN';
+      final suggested = (step.suggestedTarget ?? step.latestTarget)?.toString() ??
+          'UNKNOWN';
       final direct = step.isDirect ? 'direct' : 'transitive';
       buffer.writeln(
-        '  ${step.package} $locked -> $latest ($direct ${step.section.asLabel()})',
+        '  ${step.package} $locked -> $suggested ($direct ${step.section.asLabel()})',
       );
       if (step.delta == VersionDelta.major) {
         buffer.writeln(
           '  Safe target: ${step.safeTarget?.toString() ?? 'UNKNOWN'}',
         );
-        buffer.writeln('  Latest target: $latest');
+        buffer.writeln(
+          '  Latest target: ${step.latestTarget?.toString() ?? 'UNKNOWN'}',
+        );
       }
       buffer.writeln('  Reason: ${step.reason}');
       buffer.writeln('  Action: ${step.action}');
@@ -155,9 +183,13 @@ String renderPlanHuman(UpgradePlan plan) {
   return buffer.toString();
 }
 
-String renderPlanMarkdown(UpgradePlan plan) {
+String renderPlanMarkdown(UpgradePlan plan, {ReportMetadata? meta}) {
   final buffer = StringBuffer();
   buffer.writeln('## Safe Upgrade Plan - ${plan.projectName}');
+  if (meta != null) {
+    buffer.writeln();
+    buffer.writeln(formatReportMetadata(meta));
+  }
   buffer.writeln();
 
   void writeBucket(PlanBucket bucket, String label) {
@@ -170,16 +202,19 @@ String renderPlanMarkdown(UpgradePlan plan) {
     }
     for (final step in items) {
       final locked = step.locked?.toString() ?? 'UNKNOWN';
-      final latest = step.latestTarget?.toString() ?? 'UNKNOWN';
+      final suggested = (step.suggestedTarget ?? step.latestTarget)?.toString() ??
+          'UNKNOWN';
       final direct = step.isDirect ? 'direct' : 'transitive';
       buffer.writeln(
-        '- [ ] `${step.package}` $locked -> $latest ($direct ${step.section.asLabel()})',
+        '- [ ] `${step.package}` $locked -> $suggested ($direct ${step.section.asLabel()})',
       );
       if (step.delta == VersionDelta.major) {
         buffer.writeln(
           '  - Safe target: ${step.safeTarget?.toString() ?? 'UNKNOWN'}',
         );
-        buffer.writeln('  - Latest target: $latest');
+        buffer.writeln(
+          '  - Latest target: ${step.latestTarget?.toString() ?? 'UNKNOWN'}',
+        );
       }
       buffer.writeln('  - Reason: ${step.reason}');
       buffer.writeln('  - Action: ${step.action}');
@@ -201,7 +236,7 @@ String renderPlanMarkdown(UpgradePlan plan) {
   return buffer.toString();
 }
 
-String renderPlanJson(UpgradePlan plan) {
+String renderPlanJson(UpgradePlan plan, {ReportMetadata? meta}) {
   final steps = plan.steps
       .map((step) => {
             'bucket': _bucketName(step.bucket),
@@ -236,6 +271,10 @@ String renderPlanJson(UpgradePlan plan) {
     'steps': steps,
   };
 
+  if (meta != null) {
+    jsonMap['meta'] = meta.toJson();
+  }
+
   return const JsonEncoder.withIndent('  ').convert(jsonMap);
 }
 
@@ -255,4 +294,13 @@ String _formatDuration(Duration duration) {
   }
   final seconds = ms / 1000;
   return '${seconds.toStringAsFixed(1)}s';
+}
+
+String formatReportMetadata(ReportMetadata meta) {
+  final cache = meta.cacheEnabled
+      ? 'enabled (${meta.cacheTtlHours}h)'
+      : 'disabled';
+  return 'Generated: ${meta.generatedAt.toIso8601String()} | Tool: dep_guard ${meta.toolVersion} '
+      '| Cache: $cache | Network: timeout ${meta.timeoutSeconds}s, retries ${meta.retries} '
+      '| Allow network fail: ${meta.allowNetworkFail}';
 }

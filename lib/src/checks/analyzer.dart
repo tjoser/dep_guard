@@ -20,6 +20,7 @@ class Analyzer {
     required bool explainScore,
   }) async {
     final start = DateTime.now();
+    final now = DateTime.now();
     final packages = context.packages;
     final packageNames = packages.map((pkg) => pkg.name).toSet();
     final result = await pubClient.fetchPackages(packageNames);
@@ -44,15 +45,19 @@ class Analyzer {
           final replacement = info.replacedBy != null
               ? ' Replace with ${info.replacedBy}.'
               : '';
+          final lastPublished = info.latestPublished != null
+              ? ' Last release ${_formatAge(info.latestPublished!, now)}.'
+              : '';
           findings.add(
             Finding(
+              rule: FindingRule.discontinued,
               severity: severity,
               package: pkg.name,
               locked: pkg.lockedVersion,
               latest: info.latestVersion,
               section: pkg.section,
               isDirect: pkg.isDirect,
-              message: 'Discontinued on pub.dev.$replacement',
+              message: 'Discontinued on pub.dev.$replacement$lastPublished',
               action: info.replacedBy != null
                   ? 'Switch to ${info.replacedBy}.'
                   : 'Find a maintained replacement.',
@@ -78,6 +83,7 @@ class Analyzer {
       if (delta == VersionDelta.major && !config.isRuleIgnored('major')) {
         findings.add(
           Finding(
+            rule: FindingRule.majorBehind,
             severity: pkg.isDirect ? Severity.warn : Severity.info,
             package: pkg.name,
             locked: pkg.lockedVersion,
@@ -91,6 +97,7 @@ class Analyzer {
       } else if (delta == VersionDelta.minor || delta == VersionDelta.patch) {
         findings.add(
           Finding(
+            rule: FindingRule.minorPatchBehind,
             severity: Severity.info,
             package: pkg.name,
             locked: pkg.lockedVersion,
@@ -106,7 +113,7 @@ class Analyzer {
 
     if (!config.isRuleIgnored('stale_package')) {
       final staleCutoff =
-          DateTime.now().subtract(Duration(days: config.staleMonths * 30));
+          now.subtract(Duration(days: config.staleMonths * 30));
       for (final pkg in packages) {
         final info = result.packages[pkg.name];
         if (info == null || info.latestPublished == null) {
@@ -115,13 +122,15 @@ class Analyzer {
         if (info.latestPublished!.isBefore(staleCutoff)) {
           findings.add(
             Finding(
+              rule: FindingRule.stalePackage,
               severity: Severity.warn,
               package: pkg.name,
               locked: pkg.lockedVersion,
               latest: info.latestVersion,
               section: pkg.section,
               isDirect: pkg.isDirect,
-              message: 'Stale package (no releases in ${config.staleMonths} months).',
+              message:
+                  'Stale package (last release ${_formatAge(info.latestPublished!, now)}).',
               action: 'Audit maintenance status or pin carefully.',
             ),
           );
@@ -148,6 +157,7 @@ class Analyzer {
           if (isAny || isOpenEnded) {
             findings.add(
               Finding(
+                rule: FindingRule.riskyConstraints,
                 severity: Severity.warn,
                 package: name,
                 locked: null,
@@ -170,6 +180,7 @@ class Analyzer {
         !config.isRuleIgnored('dependency_overrides')) {
       findings.add(
         Finding(
+          rule: FindingRule.dependencyOverrides,
           severity: Severity.warn,
           package: 'dependency_overrides',
           locked: null,
@@ -182,22 +193,13 @@ class Analyzer {
       );
     }
 
-    findings.add(
-      Finding(
-        severity: Severity.info,
-        package: 'project',
-        locked: null,
-        latest: null,
-        section: Section.prod,
-        isDirect: true,
-        message:
-            'Type: ${context.pubspec.isFlutter ? 'Flutter' : 'Dart'} | SDK constraints: ${context.pubspec.sdkConstraint} | Direct deps: ${packages.where((pkg) => pkg.isDirect).length} | Transitive: ${packages.where((pkg) => !pkg.isDirect).length}',
-        action: 'Informational.',
-      ),
-    );
-
     findings.sort((a, b) => a.package.compareTo(b.package));
-    final summary = _summaryFor(findings, context.pubspec.sdkConstraint, packages);
+    final summary = _summaryFor(
+      findings,
+      context.pubspec.sdkConstraint,
+      context.pubspec.isFlutter ? 'Flutter' : 'Dart',
+      packages,
+    );
     final scoreResult = calculateScore(findings);
 
     final duration = DateTime.now().difference(start);
@@ -216,6 +218,7 @@ class Analyzer {
   HealthSummary _summaryFor(
     List<Finding> findings,
     String sdkConstraint,
+    String projectType,
     List<PackageRef> packages,
   ) {
     var critical = 0;
@@ -243,6 +246,30 @@ class Analyzer {
       directCount: directCount,
       transitiveCount: transitiveCount,
       sdkConstraint: sdkConstraint,
+      projectType: projectType,
     );
   }
+}
+
+String _formatAge(DateTime published, DateTime now) {
+  final ageDays = now.difference(published).inDays;
+  if (ageDays < 0) {
+    return 'unknown';
+  }
+  if (ageDays < 60) {
+    return _pluralize(ageDays, 'day');
+  }
+  final months = (ageDays / 30).floor();
+  if (months < 24) {
+    return _pluralize(months, 'month');
+  }
+  final years = (months / 12).floor();
+  return _pluralize(years, 'year');
+}
+
+String _pluralize(int value, String unit) {
+  if (value == 1) {
+    return '$value $unit ago';
+  }
+  return '$value ${unit}s ago';
 }

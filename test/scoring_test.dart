@@ -6,6 +6,7 @@ void main() {
   test('health score deductions', () {
     final findings = [
       Finding(
+        rule: FindingRule.discontinued,
         severity: Severity.critical,
         package: 'http',
         message: 'Discontinued on pub.dev.',
@@ -16,6 +17,7 @@ void main() {
         isDirect: true,
       ),
       Finding(
+        rule: FindingRule.stalePackage,
         severity: Severity.warn,
         package: 'meta',
         message: 'Stale package (no releases in 18 months).',
@@ -26,6 +28,7 @@ void main() {
         isDirect: false,
       ),
       Finding(
+        rule: FindingRule.majorBehind,
         severity: Severity.warn,
         package: 'collection',
         message: 'Major version behind.',

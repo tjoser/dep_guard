@@ -8,6 +8,71 @@ enum VersionDelta { patch, minor, major, unknown }
 
 enum PlanBucket { safePatch, safeMinor, riskyMajor, blocked }
 
+class FindingRule {
+  static const String discontinued = 'discontinued';
+  static const String stalePackage = 'stale_package';
+  static const String majorBehind = 'major_behind';
+  static const String minorPatchBehind = 'minor_patch_behind';
+  static const String riskyConstraints = 'risky_constraints';
+  static const String dependencyOverrides = 'dependency_overrides';
+}
+
+class ReportMetadata {
+  ReportMetadata({
+    required this.toolVersion,
+    required this.generatedAt,
+    required this.allowNetworkFail,
+    required this.cacheEnabled,
+    required this.cacheTtlHours,
+    required this.timeoutSeconds,
+    required this.retries,
+  });
+
+  final String toolVersion;
+  final DateTime generatedAt;
+  final bool allowNetworkFail;
+  final bool cacheEnabled;
+  final int cacheTtlHours;
+  final int timeoutSeconds;
+  final int retries;
+
+  Map<String, Object> toJson() {
+    return {
+      'toolVersion': toolVersion,
+      'generatedAt': generatedAt.toIso8601String(),
+      'allowNetworkFail': allowNetworkFail,
+      'cache': {
+        'enabled': cacheEnabled,
+        'ttlHours': cacheTtlHours,
+      },
+      'network': {
+        'timeoutSeconds': timeoutSeconds,
+        'retries': retries,
+      },
+    };
+  }
+}
+
+class CiSummary {
+  CiSummary({
+    required this.threshold,
+    required this.exceeded,
+    required this.failingCount,
+  });
+
+  final String threshold;
+  final bool exceeded;
+  final int failingCount;
+
+  Map<String, Object> toJson() {
+    return {
+      'threshold': threshold,
+      'exceeded': exceeded,
+      'failingCount': failingCount,
+    };
+  }
+}
+
 class PackageRef {
   PackageRef({
     required this.name,
@@ -55,6 +120,7 @@ class PubPackageInfo {
 
 class Finding {
   Finding({
+    required this.rule,
     required this.severity,
     required this.package,
     required this.message,
@@ -65,6 +131,7 @@ class Finding {
     required this.isDirect,
   });
 
+  final String rule;
   final Severity severity;
   final String package;
   final String message;
@@ -105,6 +172,7 @@ class HealthSummary {
     required this.directCount,
     required this.transitiveCount,
     required this.sdkConstraint,
+    required this.projectType,
   });
 
   final int critical;
@@ -113,6 +181,7 @@ class HealthSummary {
   final int directCount;
   final int transitiveCount;
   final String sdkConstraint;
+  final String projectType;
 }
 
 class PlanStep {

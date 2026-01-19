@@ -8,6 +8,8 @@ import 'package:test/test.dart';
 
 void main() {
   final fixtureDir = Directory('test/fixtures/sample');
+  final plainFixtureDir = Directory('test/fixtures/plain');
+  final overridesFixtureDir = Directory('test/fixtures/overrides');
 
   test('parse pubspec.yaml', () {
     final pubspec = parsePubspec(fixtureDir);
@@ -24,16 +26,21 @@ void main() {
   });
 
   test('classify direct vs transitive', () {
-    final project = loadProject(fixtureDir);
+    final project = loadProject(plainFixtureDir);
     final http = project.packages.firstWhere((p) => p.name == 'http');
     final meta = project.packages.firstWhere((p) => p.name == 'meta');
-    final path = project.packages.firstWhere((p) => p.name == 'path');
 
     expect(http.isDirect, isTrue);
     expect(http.section, Section.prod);
     expect(meta.isDirect, isFalse);
     expect(meta.section, Section.transitive);
-    expect(path.section, Section.override);
+  });
+
+  test('classify dependency overrides', () {
+    final project = loadProject(overridesFixtureDir);
+    final gamma = project.packages.firstWhere((p) => p.name == 'gamma');
+
+    expect(gamma.section, Section.override);
   });
 
   test('ignore packages from config', () {

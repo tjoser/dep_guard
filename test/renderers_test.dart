@@ -18,6 +18,7 @@ void main() {
         directCount: 0,
         transitiveCount: 0,
         sdkConstraint: '>=3.0.0 <4.0.0',
+        projectType: 'Dart',
       ),
       networkFailures: false,
     );
