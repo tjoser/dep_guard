@@ -1,0 +1,16 @@
+packages:
+  http:
+    version: "0.13.6"
+    dependency: "direct main"
+  collection:
+    version: "1.17.2"
+    dependency: "direct main"
+  test:
+    version: "1.21.0"
+    dependency: "direct dev"
+  path:
+    version: "1.8.0"
+    dependency: "direct overridden"
+  meta:
+    version: "1.9.1"
+    dependency: "transitive"

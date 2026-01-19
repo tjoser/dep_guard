@@ -1,0 +1,7 @@
+ignore:
+  packages:
+    - meta
+  rules:
+    - discontinued
+thresholds:
+  stale_months: 24

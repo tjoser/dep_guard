@@ -1,0 +1,16 @@
+packages:
+  alpha:
+    version: "1.0.0"
+    dependency: "direct main"
+  beta:
+    version: "1.0.0"
+    dependency: "direct main"
+  gamma:
+    version: "1.0.0"
+    dependency: "direct overridden"
+  delta:
+    version: "1.0.0"
+    dependency: "direct dev"
+  epsilon:
+    version: "1.0.0"
+    dependency: "transitive"
