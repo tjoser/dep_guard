@@ -31,6 +31,9 @@ ProjectContext loadProject(Directory projectDir) {
     if (config.ignorePackages.contains(name)) {
       return;
     }
+    if (pubspec.sdkDependencies.contains(name) || locked.source == 'sdk') {
+      return;
+    }
     final section = _sectionFor(name, pubspec);
     final isDirect = section != Section.transitive;
     packages.add(

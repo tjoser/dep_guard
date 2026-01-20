@@ -139,9 +139,16 @@ class Analyzer {
     }
 
     if (!config.isRuleIgnored('risky_constraints')) {
-      void checkConstraints(Map<String, String> deps, Section section) {
+      void checkConstraints(
+        Map<String, String> deps,
+        Section section,
+        Set<String> sdkDependencies,
+      ) {
         deps.forEach((name, constraint) {
           if (config.ignorePackages.contains(name)) {
+            return;
+          }
+          if (sdkDependencies.contains(name)) {
             return;
           }
           final isAny = constraint.trim() == 'any' || constraint.trim() == '>=0.0.0';
@@ -172,8 +179,16 @@ class Analyzer {
         });
       }
 
-      checkConstraints(context.pubspec.dependencies, Section.prod);
-      checkConstraints(context.pubspec.devDependencies, Section.dev);
+      checkConstraints(
+        context.pubspec.dependencies,
+        Section.prod,
+        context.pubspec.sdkDependencies,
+      );
+      checkConstraints(
+        context.pubspec.devDependencies,
+        Section.dev,
+        context.pubspec.sdkDependencies,
+      );
     }
 
     if (context.pubspec.dependencyOverrides.isNotEmpty &&

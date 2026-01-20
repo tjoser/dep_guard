@@ -10,6 +10,7 @@ class PubspecInfo {
     required this.dependencies,
     required this.devDependencies,
     required this.dependencyOverrides,
+    required this.sdkDependencies,
     required this.isFlutter,
   });
 
@@ -18,6 +19,7 @@ class PubspecInfo {
   final Map<String, String> dependencies;
   final Map<String, String> devDependencies;
   final Map<String, String> dependencyOverrides;
+  final Set<String> sdkDependencies;
   final bool isFlutter;
 }
 
@@ -37,7 +39,7 @@ PubspecInfo parsePubspec(Directory projectDir) {
       ? env['sdk'] as String
       : 'unknown';
 
-  Map<String, String> mapFromYaml(dynamic node) {
+  Map<String, String> mapFromYaml(dynamic node, Set<String> sdkPackages) {
     final map = <String, String>{};
     if (node is YamlMap) {
       node.forEach((key, value) {
@@ -45,6 +47,12 @@ PubspecInfo parsePubspec(Directory projectDir) {
           if (value is String) {
             map[key] = value;
           } else if (value is YamlMap) {
+            final sdk = value['sdk'];
+            if (sdk is String) {
+              sdkPackages.add(key);
+              map[key] = 'sdk';
+              return;
+            }
             final version = value['version'];
             if (version is String) {
               map[key] = version;
@@ -60,9 +68,10 @@ PubspecInfo parsePubspec(Directory projectDir) {
     return map;
   }
 
-  final dependencies = mapFromYaml(yaml['dependencies']);
-  final devDependencies = mapFromYaml(yaml['dev_dependencies']);
-  final overrides = mapFromYaml(yaml['dependency_overrides']);
+  final sdkDependencies = <String>{};
+  final dependencies = mapFromYaml(yaml['dependencies'], sdkDependencies);
+  final devDependencies = mapFromYaml(yaml['dev_dependencies'], sdkDependencies);
+  final overrides = mapFromYaml(yaml['dependency_overrides'], sdkDependencies);
 
   final isFlutter =
       (env != null && env['flutter'] != null) || dependencies.containsKey('flutter');
@@ -73,6 +82,7 @@ PubspecInfo parsePubspec(Directory projectDir) {
     dependencies: dependencies,
     devDependencies: devDependencies,
     dependencyOverrides: overrides,
+    sdkDependencies: sdkDependencies,
     isFlutter: isFlutter,
   );
 }

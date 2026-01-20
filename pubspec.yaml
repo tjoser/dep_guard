@@ -1,7 +1,15 @@
 name: dep_guard
 description: Dependency health and safe upgrade planning for Dart and Flutter projects.
-version: 0.1.0
+version: 0.1.1
 repository: https://github.com/tjoser/dep_guard.git
+homepage: https://github.com/tjoser/dep_guard
+issue_tracker: https://github.com/tjoser/dep_guard/issues
+topics:
+  - dependencies
+  - cli
+  - devtools
+  - dart
+  - flutter
 executables:
   dep_guard: dep_guard
 environment:

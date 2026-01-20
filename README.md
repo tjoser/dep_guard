@@ -51,7 +51,7 @@ Sample human output:
 
 ```
 Dependency Health - my_app (/path/to/my_app)
-Generated: 2025-01-18T12:00:00Z | Tool: dep_guard 0.1.0 | Cache: enabled (24h) | Network: timeout 10s, retries 2 | Allow network fail: false
+Generated: 2025-01-18T12:00:00Z | Tool: dep_guard 0.1.1 | Cache: enabled (24h) | Network: timeout 10s, retries 2 | Allow network fail: false
 Type: Dart | SDK constraints: >=3.0.0 <4.0.0 | Direct deps: 12 | Transitive: 78
 CRITICAL
   http 0.13.6 -> 1.2.1 (direct prod)
@@ -76,7 +76,7 @@ Sample JSON (abbrev):
 ```json
 {
   "project": { "name": "my_app", "path": "/path/to/my_app", "type": "Dart", "sdkConstraint": ">=3.0.0 <4.0.0" },
-  "meta": { "toolVersion": "0.1.0", "generatedAt": "2025-01-18T12:00:00Z", "allowNetworkFail": false },
+  "meta": { "toolVersion": "0.1.1", "generatedAt": "2025-01-18T12:00:00Z", "allowNetworkFail": false },
   "summary": { "healthScore": 76, "critical": 1, "warn": 4, "info": 3 },
   "findings": [
     { "rule": "discontinued", "severity": "critical", "package": "http", "locked": "0.13.6", "latest": "1.2.1" }
@@ -102,7 +102,7 @@ Sample markdown output:
 ```markdown
 ## Safe Upgrade Plan - my_app
 
-Generated: 2025-01-18T12:00:00Z | Tool: dep_guard 0.1.0 | Cache: enabled (24h) | Network: timeout 10s, retries 2 | Allow network fail: false
+Generated: 2025-01-18T12:00:00Z | Tool: dep_guard 0.1.1 | Cache: enabled (24h) | Network: timeout 10s, retries 2 | Allow network fail: false
 
 **STEP 1 - Safe (Patch)**
 - [ ] `intl` 0.18.1 -> 0.18.2 (direct prod)
@@ -132,7 +132,7 @@ Sample JSON (abbrev):
 ```json
 {
   "project": { "name": "my_app", "path": "/path/to/my_app" },
-  "meta": { "toolVersion": "0.1.0", "generatedAt": "2025-01-18T12:00:00Z" },
+  "meta": { "toolVersion": "0.1.1", "generatedAt": "2025-01-18T12:00:00Z" },
   "summary": { "safePatch": 2, "safeMinor": 1, "riskyMajor": 1, "blocked": 1, "riskScore": 9 },
   "steps": [
     { "bucket": "risky_major", "package": "http", "locked": "0.13.6", "suggestedTarget": "0.13.7", "latestTarget": "1.2.1" }

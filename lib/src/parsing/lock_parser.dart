@@ -8,10 +8,12 @@ class LockedPackage {
   LockedPackage({
     required this.name,
     required this.version,
+    required this.source,
   });
 
   final String name;
   final Version? version;
+  final String? source;
 }
 
 class LockInfo {
@@ -52,11 +54,16 @@ LockInfo parsePubspecLock(Directory projectDir) {
       return;
     }
     final versionRaw = value['version'];
+    final sourceRaw = value['source'];
     Version? version;
     if (versionRaw is String) {
       version = _tryParseVersion(versionRaw);
     }
-    packages[key] = LockedPackage(name: key, version: version);
+    packages[key] = LockedPackage(
+      name: key,
+      version: version,
+      source: sourceRaw is String ? sourceRaw : null,
+    );
   });
   return LockInfo(packages: packages);
 }
