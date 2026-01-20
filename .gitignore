@@ -2,4 +2,4 @@
 .packages
 .pub/
 build/
-pubspec.lock
+/pubspec.lock
