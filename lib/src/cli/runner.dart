@@ -180,11 +180,22 @@ abstract class DepGuardCommand extends Command<int> {
 
 class AnalyzeCommand extends DepGuardCommand {
   AnalyzeCommand({required super.stdout, required super.stderr}) {
-    argParser.addFlag(
-      'explain-score',
-      negatable: false,
-      help: 'Explain health score deductions.',
-    );
+    argParser
+      ..addFlag(
+        'explain-score',
+        negatable: false,
+        help: 'Explain health score deductions.',
+      )
+      ..addOption(
+        'min-severity',
+        defaultsTo: 'info',
+        allowed: ['critical', 'warn', 'info'],
+        help: 'Only show findings at or above this severity.',
+      )
+      ..addOption(
+        'max-results',
+        help: 'Limit the number of findings shown (most severe first).',
+      );
   }
 
   @override
@@ -196,7 +207,9 @@ class AnalyzeCommand extends DepGuardCommand {
   @override
   Future<int> run() async {
     final options = commonOptions();
-    if (options.format != 'human' && options.format != 'json') {
+    if (options.format != 'human' &&
+        options.format != 'json' &&
+        options.format != 'compact') {
       throw UsageException('Unsupported format ${options.format}.', usage);
     }
     final project = loadProjectContext(options);
@@ -214,18 +227,41 @@ class AnalyzeCommand extends DepGuardCommand {
       allowNetworkFail: options.allowNetworkFail,
     );
 
-    final output = options.format == 'json'
-        ? renderHealthJson(
-            report,
-            explainScore: argResults?['explain-score'] == true,
-            meta: meta,
-          )
-        : renderHealthHuman(
-            report,
-            quiet: options.quiet,
-            explainScore: argResults?['explain-score'] == true,
-            meta: meta,
-          );
+    final minSeverityValue =
+        argResults?['min-severity'] as String? ?? 'info';
+    final minSeverity = _severityFromString(minSeverityValue);
+    final maxResults =
+        _parsePositiveInt(argResults?['max-results'] as String?);
+    final findingsView =
+        _buildFindingsView(report.findings, minSeverity, maxResults);
+    final filterNote = _buildFilterNote(findingsView);
+    final filtersJson = _buildFiltersJson(findingsView);
+
+    final output = switch (options.format) {
+      'json' => renderHealthJson(
+          report,
+          explainScore: argResults?['explain-score'] == true,
+          meta: meta,
+          findings: findingsView.findings,
+          filters: filtersJson,
+        ),
+      'compact' => renderHealthCompact(
+          report,
+          quiet: options.quiet,
+          explainScore: argResults?['explain-score'] == true,
+          meta: meta,
+          findings: findingsView.findings,
+          filterNote: filterNote,
+        ),
+      _ => renderHealthHuman(
+          report,
+          quiet: options.quiet,
+          explainScore: argResults?['explain-score'] == true,
+          meta: meta,
+          findings: findingsView.findings,
+          filterNote: filterNote,
+        ),
+    };
 
     await writeOutput(output, stdout: stdout, outPath: options.out);
     return 0;
@@ -428,4 +464,109 @@ String _formatDuration(Duration duration) {
   }
   final seconds = ms / 1000;
   return '${seconds.toStringAsFixed(1)}s';
+}
+
+class _FindingsView {
+  _FindingsView({
+    required this.findings,
+    required this.total,
+    required this.eligible,
+    required this.shown,
+    required this.minSeverity,
+    required this.maxResults,
+  });
+
+  final List<Finding> findings;
+  final int total;
+  final int eligible;
+  final int shown;
+  final Severity minSeverity;
+  final int? maxResults;
+
+  bool get isFiltered =>
+      minSeverity != Severity.info || (maxResults != null && maxResults! > 0);
+}
+
+int? _parsePositiveInt(String? value) {
+  final parsed = int.tryParse(value ?? '');
+  if (parsed == null || parsed <= 0) {
+    return null;
+  }
+  return parsed;
+}
+
+_FindingsView _buildFindingsView(
+  List<Finding> findings,
+  Severity minSeverity,
+  int? maxResults,
+) {
+  final eligible = findings
+      .where((finding) => finding.severity.index <= minSeverity.index)
+      .toList();
+  final ordered = _orderFindingsBySeverity(eligible);
+  final limited = maxResults != null && ordered.length > maxResults
+      ? ordered.take(maxResults).toList()
+      : ordered;
+  return _FindingsView(
+    findings: limited,
+    total: findings.length,
+    eligible: eligible.length,
+    shown: limited.length,
+    minSeverity: minSeverity,
+    maxResults: maxResults,
+  );
+}
+
+List<Finding> _orderFindingsBySeverity(List<Finding> findings) {
+  final grouped = _groupFindingsBySeverity(findings);
+  return [
+    ...grouped[Severity.critical]!,
+    ...grouped[Severity.warn]!,
+    ...grouped[Severity.info]!,
+  ];
+}
+
+Map<Severity, List<Finding>> _groupFindingsBySeverity(
+  List<Finding> findings,
+) {
+  final grouped = <Severity, List<Finding>>{
+    Severity.critical: [],
+    Severity.warn: [],
+    Severity.info: [],
+  };
+  for (final finding in findings) {
+    grouped[finding.severity]!.add(finding);
+  }
+  return grouped;
+}
+
+String? _buildFilterNote(_FindingsView view) {
+  if (!view.isFiltered) {
+    return null;
+  }
+  final parts = <String>[];
+  if (view.minSeverity != Severity.info) {
+    parts.add('min severity ${view.minSeverity.name}');
+  }
+  if (view.maxResults != null && view.maxResults! > 0) {
+    parts.add('max ${view.maxResults}');
+  }
+  final detail = parts.isEmpty ? '' : ' (${parts.join(', ')})';
+  return 'Showing ${view.shown} of ${view.total} findings$detail.';
+}
+
+Map<String, Object?>? _buildFiltersJson(_FindingsView view) {
+  if (!view.isFiltered) {
+    return null;
+  }
+  final filters = <String, Object?>{
+    'minSeverity': view.minSeverity.name,
+    'totalFindings': view.total,
+    'eligibleFindings': view.eligible,
+    'shownFindings': view.shown,
+  };
+  if (view.maxResults != null && view.maxResults! > 0) {
+    filters['maxResults'] = view.maxResults;
+  }
+  return filters;
 }

@@ -7,7 +7,10 @@ String renderHealthHuman(
   required bool quiet,
   required bool explainScore,
   ReportMetadata? meta,
+  List<Finding>? findings,
+  String? filterNote,
 }) {
+  final effectiveFindings = findings ?? report.findings;
   final buffer = StringBuffer();
   buffer.writeln(
     'Dependency Health - ${report.projectName} (${report.projectPath})',
@@ -22,6 +25,9 @@ String renderHealthHuman(
   if (report.networkFailures) {
     buffer.writeln('Warning: pub.dev unavailable for some packages.');
   }
+  if (filterNote != null) {
+    buffer.writeln(filterNote);
+  }
   buffer.writeln();
 
   final grouped = <Severity, List<Finding>>{
@@ -29,7 +35,7 @@ String renderHealthHuman(
     Severity.warn: [],
     Severity.info: [],
   };
-  for (final finding in report.findings) {
+  for (final finding in effectiveFindings) {
     grouped[finding.severity]!.add(finding);
   }
 
@@ -41,7 +47,7 @@ String renderHealthHuman(
     if (quiet && severity == Severity.info) {
       return;
     }
-    buffer.writeln(label.toUpperCase());
+    buffer.writeln('${label.toUpperCase()} (${items.length})');
     for (final item in items) {
       final locked = item.locked?.toString() ?? 'UNKNOWN';
       final latest = item.latest?.toString() ?? 'UNKNOWN';
@@ -75,13 +81,92 @@ String renderHealthHuman(
   return buffer.toString();
 }
 
+String renderHealthCompact(
+  HealthReport report, {
+  required bool quiet,
+  required bool explainScore,
+  ReportMetadata? meta,
+  List<Finding>? findings,
+  String? filterNote,
+}) {
+  final effectiveFindings = findings ?? report.findings;
+  final buffer = StringBuffer();
+  buffer.writeln(
+    'Dependency Health - ${report.projectName} (${report.projectPath})',
+  );
+  if (meta != null) {
+    buffer.writeln(formatReportMetadata(meta));
+  }
+  buffer.writeln(
+    'Type: ${report.summary.projectType} | SDK constraints: ${report.summary.sdkConstraint} '
+    '| Direct deps: ${report.summary.directCount} | Transitive: ${report.summary.transitiveCount}',
+  );
+  if (report.networkFailures) {
+    buffer.writeln('Warning: pub.dev unavailable for some packages.');
+  }
+  if (filterNote != null) {
+    buffer.writeln(filterNote);
+  }
+  buffer.writeln();
+
+  final grouped = <Severity, List<Finding>>{
+    Severity.critical: [],
+    Severity.warn: [],
+    Severity.info: [],
+  };
+  for (final finding in effectiveFindings) {
+    grouped[finding.severity]!.add(finding);
+  }
+
+  void writeSection(Severity severity, String label) {
+    final items = grouped[severity]!;
+    if (items.isEmpty) {
+      return;
+    }
+    if (quiet && severity == Severity.info) {
+      return;
+    }
+    buffer.writeln('${label.toUpperCase()} (${items.length})');
+    for (final item in items) {
+      final locked = item.locked?.toString() ?? 'UNKNOWN';
+      final latest = item.latest?.toString() ?? 'UNKNOWN';
+      final direct = item.isDirect ? 'direct' : 'transitive';
+      buffer.writeln(
+        '- ${item.package} $locked -> $latest ($direct ${item.section.asLabel()}) | ${item.message}',
+      );
+    }
+  }
+
+  writeSection(Severity.critical, 'Critical');
+  writeSection(Severity.warn, 'Warn');
+  writeSection(Severity.info, 'Info');
+
+  if (explainScore && report.explainScore.isNotEmpty) {
+    buffer.writeln('Score breakdown:');
+    for (final line in report.explainScore) {
+      buffer.writeln('  $line');
+    }
+  }
+
+  buffer.writeln(
+    'Health score: ${report.score}/100 | Critical: ${report.summary.critical} '
+    'Warn: ${report.summary.warn} Info: ${report.summary.info} | '
+    'Duration: ${_formatDuration(report.duration)}',
+  );
+
+  return buffer.toString();
+}
+
 String renderHealthJson(
   HealthReport report, {
   required bool explainScore,
   ReportMetadata? meta,
   CiSummary? ci,
+  List<Finding>? findings,
+  Map<String, Object?>? filters,
 }) {
-  final findings = report.findings
+  final effectiveFindings = findings ?? report.findings;
+  final findingsList = effectiveFindings
       .map((finding) => {
             'rule': finding.rule,
             'severity': finding.severity.name,
@@ -112,7 +197,7 @@ String renderHealthJson(
       'durationMs': report.duration.inMilliseconds,
       'networkFailures': report.networkFailures,
     },
-    'findings': findings,
+    'findings': findingsList,
   };
 
   if (meta != null) {
@@ -120,6 +205,9 @@ String renderHealthJson(
   }
   if (ci != null) {
     jsonMap['ci'] = ci.toJson();
+  }
+  if (filters != null) {
+    jsonMap['filters'] = filters;
   }
   if (explainScore) {
     jsonMap['scoreBreakdown'] = report.explainScore;

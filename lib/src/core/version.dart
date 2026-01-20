@@ -1,1 +1,1 @@
-const depGuardVersion = '0.1.0';
+const depGuardVersion = '0.1.2';
